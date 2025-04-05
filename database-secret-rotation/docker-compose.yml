@@ -1,7 +1,39 @@
 
 
 services:
-  vault_server:
+  app:
+    build: .
+    environment:
+      MY_ADDRESS:                   :8080
+      VAULT_ADDRESS:                http://vault-server:8200
+      VAULT_APPROLE_ROLE_ID:        demo-web-app
+      VAULT_APPROLE_SECRET_ID_FILE: /tmp/secret
+      VAULT_DATABASE_CREDS_PATH:    database/creds/dev-readonly
+      VAULT_API_KEY_PATH:           api-key
+      VAULT_API_KEY_MOUNT_PATH:     kv-v2
+      VAULT_API_KEY_FIELD:          api-key-field
+      DATABASE_HOSTNAME:            database
+      DATABASE_PORT:                5432
+      DATABASE_NAME:                postgres
+      DATABASE_TIMEOUT:             10s
+      SECURE_SERVICE_ADDRESS:       http://secure-service/api
+    volumes:
+      - type:   volume
+        source: trusted-orchestrator-volume
+        target: /tmp
+    ports:
+      - "8080:8080"
+    depends_on:
+      vault-server:
+        condition: service_healthy
+      trusted-orchestrator:
+        condition: service_healthy
+      database:
+        condition: service_healthy
+      secure-service:
+        condition: service_healthy
+
+  vault-server:
     build: ./config/vault-server/
     cap_add:
       - IPC_LOCK
