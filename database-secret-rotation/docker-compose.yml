@@ -1,0 +1,78 @@
+
+
+services:
+  vault_server:
+    build: ./config/vault-server/
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      APPROLE_ROLE_ID: demo-web-app
+      ORCHESTRATOR_TOKEN: insecure-token
+      DATABASE_HOSTNAME: database
+      DATABASE_PORT: 5432
+      API_KEY_PATH: kv-v2/api-key
+      API_KEY_FIELD: api-key-field
+    ports:
+      - "8200:8200"
+    depends_on:
+      database:
+        condition: service_healthy
+
+  trusted-orchestrator:
+    build: ./config/trusted-orchestrator
+    environment:
+      VAULT_ADDRESS:      http://vault-server:8200
+      ORCHESTRATOR_TOKEN: insecure-token
+    volumes:
+      - type:   volume
+        source: trusted-orchestrator-volume
+        target: /tmp
+    depends_on:
+      vault-server:
+        condition: service_healthy
+
+  database:
+    image: postgres:14.0
+    environment:
+      POSTGRES_PASSWORD: rootpassword
+    volumes:
+      - type:   bind
+        source: ./config/database/
+        target: /docker-entrypoint-initdb.d/
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test:         [ "CMD", "/usr/bin/pg_isready" ]
+      start_period: 1s
+      interval:     1s
+      timeout:      1s
+      retries:      30
+  
+  secure-service:
+    image: nginx:latest
+    environment:
+      EXPECTED_API_KEY: my-secret-key # sets the expected value for incoming requests' header X-API-KEY
+    volumes:
+      - type:   bind
+        source: ./config/secure-service/default.conf.template
+        target: /etc/nginx/templates/default.conf.template
+    ports:
+      - "1717:80"
+    healthcheck:
+      test:         curl --fail -s http://localhost/healthcheck || exit 1
+      start_period: 1s
+      interval:     1s
+      timeout:      1s
+      retries:      30
+
+  app-healthy:
+    image: alpine:latest
+    command: [ "echo", "all services are up & healthy" ]
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  trusted-orchestrator-volume:
+
